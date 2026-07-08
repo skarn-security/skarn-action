@@ -1,0 +1,8 @@
+- id: skarn
+  name: skarn AI-session scan
+  description: Scan AI coding-assistant session logs for leaked credentials and attack patterns before committing.
+  entry: skarn check
+  language: system
+  pass_filenames: false
+  always_run: true
+  require_serial: true

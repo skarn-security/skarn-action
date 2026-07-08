@@ -1,0 +1,35 @@
+name: agentic-ci-scan
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-then-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the AI coding agent (leaves session logs under $HOME)
+        run: echo "replace with the agent job that produced ~/.claude or ~/.codex session logs"
+
+      - name: Skarn AI-session scan
+        id: skarn
+        uses: skarn-security/skarn-action@v1
+        with:
+          version: "0.15.0"
+          fail-on-severity: high
+          sarif-file: skarn-results.sarif
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: skarn-results.sarif
+          category: skarn

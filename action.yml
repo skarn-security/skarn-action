@@ -1,0 +1,105 @@
+name: "Skarn AI-session scan"
+description: "Scan what your CI's AI agent did: leaked credentials and attack patterns in AI coding-assistant session logs left on the runner."
+author: "Skarn"
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  skarn-path:
+    description: "Path to a pre-installed skarn binary. If set (or skarn is already on PATH), the download step is skipped."
+    required: false
+    default: ""
+  version:
+    description: "Skarn version to download when no binary is on PATH (for example 0.15.0). Defaults to the latest published release."
+    required: false
+    default: "latest"
+  download-base-url:
+    description: "Base URL the binary is fetched from: <base>/v<version>/skarn-<arch>-<os>."
+    required: false
+    default: "https://github.com/skarn-security/skarn-dist/releases/download"
+  hours:
+    description: "Scan window in hours; 0 means no limit. Empty uses Skarn's default (720)."
+    required: false
+    default: ""
+  cli:
+    description: "Restrict the scan to one assistant: claude, gemini, codex, cursor, copilot. Empty scans all."
+    required: false
+    default: ""
+  project:
+    description: "Restrict the scan to sessions under this project path. Empty scans all."
+    required: false
+    default: ""
+  severity:
+    description: "Report only findings at or above this severity: low, medium, high, critical. Empty uses Skarn's default (medium)."
+    required: false
+    default: ""
+  fail-on-severity:
+    description: "Fail the job (exit 1) if any finding is at or above this severity. Empty means report-only."
+    required: false
+    default: ""
+  fail-on-risk:
+    description: "Fail the job (exit 2) if the session risk score exceeds this 0-100 threshold. Empty means report-only."
+    required: false
+    default: ""
+  sarif-file:
+    description: "Path the SARIF report is written to."
+    required: false
+    default: "skarn-results.sarif"
+  soft-fail:
+    description: "Never fail the job on findings; still report. The scan exit code is exposed as the exit-code output."
+    required: false
+    default: "false"
+  job-summary:
+    description: "Write a findings summary to the GitHub job summary."
+    required: false
+    default: "true"
+  annotations:
+    description: "Emit per-finding workflow annotations (surfaced on the run and, for a pull_request, on the Checks tab)."
+    required: false
+    default: "true"
+  license:
+    description: "Skarn license token, exported as SKARN_LICENSE for paid flags. The free core needs none."
+    required: false
+    default: ""
+  extra-args:
+    description: "Additional arguments appended to the skarn check invocation. Split on whitespace; quoted values with spaces are not preserved."
+    required: false
+    default: ""
+
+outputs:
+  sarif-file:
+    description: "Path to the written SARIF report."
+    value: ${{ steps.scan.outputs.sarif-file }}
+  exit-code:
+    description: "The skarn check exit code (0 clean, 1 fail-on-severity, 2 fail-on-risk, 3 canary, 6 scan error)."
+    value: ${{ steps.scan.outputs.exit-code }}
+  risk-score:
+    description: "Session risk score (0-100) parsed from the SARIF report."
+    value: ${{ steps.scan.outputs.risk-score }}
+  findings-count:
+    description: "Number of findings in the SARIF report."
+    value: ${{ steps.scan.outputs.findings-count }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        SKARN_LICENSE: ${{ inputs.license }}
+        INPUT_SKARN_PATH: ${{ inputs.skarn-path }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_DOWNLOAD_BASE_URL: ${{ inputs.download-base-url }}
+        INPUT_HOURS: ${{ inputs.hours }}
+        INPUT_CLI: ${{ inputs.cli }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_SEVERITY: ${{ inputs.severity }}
+        INPUT_FAIL_ON_SEVERITY: ${{ inputs.fail-on-severity }}
+        INPUT_FAIL_ON_RISK: ${{ inputs.fail-on-risk }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        INPUT_SOFT_FAIL: ${{ inputs.soft-fail }}
+        INPUT_JOB_SUMMARY: ${{ inputs.job-summary }}
+        INPUT_ANNOTATIONS: ${{ inputs.annotations }}
+        INPUT_EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: bash "${GITHUB_ACTION_PATH}/scripts/scan.sh"

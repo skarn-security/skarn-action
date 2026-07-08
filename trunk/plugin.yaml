@@ -1,0 +1,31 @@
+# Skarn Trunk plugin scaffold. Users add this repo under plugins.sources in their
+# .trunk/trunk.yaml, then `trunk check enable skarn`. See README.md for the inline
+# (copy-paste) form and the Action (gating) vs Linter (visibility) trade-off.
+version: 0.1
+
+tools:
+  definitions:
+    - name: skarn
+      # @SYSTEM uses the brew-installed skarn on PATH (like a system linter). To ship
+      # a pinned binary instead, replace this with a runtime/download definition.
+      runtime: system
+      shims: [skarn]
+
+lint:
+  definitions:
+    - name: skarn
+      files: [ALL]
+      commands:
+        - name: check
+          output: sarif
+          read_output_from: stdout
+          run: skarn check --project "$(basename ${workspace})" --format sarif
+          success_codes: [0, 1]
+
+actions:
+  definitions:
+    - id: skarn-pre-push
+      display_name: Skarn (AI session secret scan)
+      triggers:
+        - git_hooks: [pre-push]
+      run: skarn check --project "$(basename ${workspace})" --fail-on-severity high
