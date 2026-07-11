@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.15.0"
+    version: "0.16.0"
     fail-on-severity: high
 ```
 
@@ -29,7 +29,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.15.0"
+    version: "0.16.0"
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
   if: always()
@@ -86,7 +86,7 @@ The wrapper is a Bash composite step: Linux and macOS runners are supported. Win
 
 ## Real-time alternative
 
-This Action is the batch, after-the-fact path. For real-time, pre-execution blocking inside an agent, use `skarn guard` (a hook that vets each tool call before it runs). See the plugin integrations under `integrations/`.
+This Action is the batch, after-the-fact path. For real-time, pre-execution blocking inside an agent, use `skarn guard` (a hook that vets each tool call before it runs). See the plugin integrations under `integrations/`. For the GitHub Copilot cloud agent specifically, `integrations/copilot-cloud-agent/` gates each tool call server-side before it runs, in the same CI this Action scans after the fact.
 
 ## License
 
