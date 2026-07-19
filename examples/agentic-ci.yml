@@ -23,12 +23,13 @@ jobs:
         id: skarn
         uses: skarn-security/skarn-action@v1
         with:
-          version: "0.17.0"
+          version: "0.18.0"
+          license: ${{ secrets.SKARN_LICENSE }}
           fail-on-severity: high
           sarif-file: skarn-results.sarif
 
       - name: Upload SARIF to code scanning
-        if: always()
+        if: always() && steps.skarn.outputs.skipped != 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: skarn-results.sarif

@@ -59,9 +59,13 @@ inputs:
     required: false
     default: "true"
   license:
-    description: "Skarn license token, exported as SKARN_LICENSE for paid flags. The free core needs none."
+    description: "Skarn license token, exported as SKARN_LICENSE. skarn check needs a license; the free one is issued at https://getskarn.com/free after a quick email confirmation. Pass it from a repository secret. A fork pull request cannot read secrets, so the scan is skipped there, never failed."
     required: false
     default: ""
+  on-missing-license:
+    description: "When skarn check finds no license (exit 7) and it is not a fork or Dependabot pull request: fail the job (fail) or warn and pass (warn). Fork and Dependabot pull requests are always warned and skipped regardless of this setting."
+    required: false
+    default: "fail"
   extra-args:
     description: "Additional arguments appended to the skarn check invocation. Split on whitespace; quoted values with spaces are not preserved."
     required: false
@@ -72,7 +76,7 @@ outputs:
     description: "Path to the written SARIF report."
     value: ${{ steps.scan.outputs.sarif-file }}
   exit-code:
-    description: "The skarn check exit code (0 clean, 1 fail-on-severity, 2 fail-on-risk, 3 canary, 6 scan error)."
+    description: "The skarn check exit code (0 clean, 1 fail-on-severity, 2 fail-on-risk, 3 canary, 5 paid feature not covered, 6 scan error, 7 no license installed)."
     value: ${{ steps.scan.outputs.exit-code }}
   risk-score:
     description: "Session risk score (0-100) parsed from the SARIF report."
@@ -80,6 +84,9 @@ outputs:
   findings-count:
     description: "Number of findings in the SARIF report."
     value: ${{ steps.scan.outputs.findings-count }}
+  skipped:
+    description: "true whenever check found no license and did not scan, so no SARIF was written - a fork or Dependabot pull request, or on-missing-license=warn / soft-fail (exit 0), or a hard missing-license failure (exit 7). false on any run that scanned. It reports whether a SARIF exists to upload, not whether the job passed. Guard a SARIF upload with if: always() && steps.<id>.outputs.skipped != 'true'."
+    value: ${{ steps.scan.outputs.skipped }}
 
 runs:
   using: "composite"
@@ -88,6 +95,7 @@ runs:
       shell: bash
       env:
         SKARN_LICENSE: ${{ inputs.license }}
+        INPUT_ON_MISSING_LICENSE: ${{ inputs.on-missing-license }}
         INPUT_SKARN_PATH: ${{ inputs.skarn-path }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_DOWNLOAD_BASE_URL: ${{ inputs.download-base-url }}

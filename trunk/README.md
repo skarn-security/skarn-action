@@ -34,11 +34,14 @@ actions:
       run: skarn check --project "$(basename ${workspace})" --fail-on-severity high
 ```
 
+`skarn check` needs a license: the free one is issued at https://getskarn.com/free after a quick email confirmation, installed once with `skarn license <file>` and read from `~/.config/skarn/license`, or supplied to a CI runner as the `SKARN_LICENSE` environment variable. Without one, `skarn check` exits 7 and Trunk fails the action with skarn's own message naming the fix - never a bare exit code.
+
 Rollout discipline (mirrors the skarn-guard / Socket-Firewall lesson): start at
 `pre-push` and report-only, then tighten.
 
 - Observe first: `run: skarn check --project "$(basename ${workspace})"` with no gating
-  flags (exit 0 always; surfaces findings without blocking).
+  flags (surfaces findings without failing the hook; a missing license or scan error
+  still exits nonzero).
 - Then enforce: `--fail-on-severity high` (exit 1 on high+), or
   `--fail-on-risk 70` (exit 2 above a session risk score).
 - Or keep the whole gate in version control with policy-as-code:
@@ -71,6 +74,7 @@ lint:
 ```
 
 Caveats:
+- **License**: exit 7 (no license installed) is outside `success_codes: [0, 1]`, so Trunk surfaces a missing license as a tool failure carrying skarn's own message, which names the fix. That is deliberate - do NOT add 7 to `success_codes`, or a run that never scanned would be reported as success.
 - **Sandbox / `$HOME`**: Trunk linters run hermetically; verify the linter can read
   `~/.claude` (try `run_linter_from: workspace` and a relaxed sandbox). If `$HOME`
   is blocked, Shape B is infeasible - use Shape A. **This is the gating experiment.**

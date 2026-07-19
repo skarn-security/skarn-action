@@ -10,7 +10,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - Writes a redacted SARIF 2.1.0 report (secrets are masked in every output; the raw value never appears).
 - Developer feedback is on by default: a job summary table and per-finding workflow annotations, both without any extra token or permission.
 - Honors `fail-on-severity` (exit 1) and `fail-on-risk` (exit 2) for CI gating; report-only until you set one.
-- Emits `risk-score`, `findings-count`, `exit-code`, and `sarif-file` as outputs.
+- Emits `risk-score`, `findings-count`, `exit-code`, `skipped`, and `sarif-file` as outputs.
 
 ## Usage
 
@@ -18,7 +18,8 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.17.0"
+    version: "0.18.0"
+    license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
 
@@ -29,10 +30,11 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.17.0"
+    version: "0.18.0"
+    license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
-  if: always()
+  if: always() && steps.skarn.outputs.skipped != 'true'
   uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: skarn-results.sarif
@@ -40,6 +42,27 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
 ```
 
 A full agent-then-scan workflow is in [`examples/agentic-ci.yml`](examples/agentic-ci.yml).
+
+## Skarn license
+
+`skarn check` needs a license. The free one is issued at https://getskarn.com/free after a quick email confirmation: register, download the license file, and store its contents as a repository secret (for example `SKARN_LICENSE`). Pass it with `license: ${{ secrets.SKARN_LICENSE }}`. The binary still verifies the license offline against a key embedded in it - there is no network call at scan time.
+
+Skarn is licensed under the [Skarn End User License Agreement](https://getskarn.com/terms/); running it constitutes acceptance. CI has no terminal to ask on, so Skarn prints a one-line stderr notice on each run instead (registering for the license already accepted the agreement on the form); set `SKARN_EULA_ACCEPTED: "1"` in the job's `env` to silence the notice on ephemeral runners.
+
+A pull request from a fork cannot read repository secrets, so the license is empty there - on exactly the pull requests an open-source project most wants scanned. The Action does not fail that build: it emits a `::warning::`, writes a job-summary note explaining why, sets the `skipped` output to `true`, deletes any partial SARIF, and exits 0. The same scan runs on the base branch, where the secret is readable. Dependabot pull requests are treated the same way, because they run against Dependabot's own secrets store rather than the repository's Actions secrets.
+
+Everywhere else, a missing license fails the job (exit 7) with a message that points at the free registration, never a bare exit code. Set `on-missing-license: warn` (or `soft-fail: true`) to downgrade that to a warning while a pipeline is still being wired up; fork and Dependabot pull requests are always skipped regardless of that input.
+
+Guard the SARIF upload with `skipped` so no run that did not scan tries to upload a SARIF that was never written - this covers the fork/Dependabot skip and the `warn` / `soft-fail` paths alike, and it stops an empty run from telling GitHub code scanning that every alert is fixed:
+
+```yaml
+- name: Upload SARIF to code scanning
+  if: always() && steps.skarn.outputs.skipped != 'true'
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: skarn-results.sarif
+    category: skarn
+```
 
 ## Inputs
 
@@ -58,7 +81,8 @@ A full agent-then-scan workflow is in [`examples/agentic-ci.yml`](examples/agent
 | `soft-fail` | `false` | Never fail the job on findings; still report. |
 | `job-summary` | `true` | Write a findings summary to the GitHub job summary. |
 | `annotations` | `true` | Emit per-finding workflow annotations. |
-| `license` | (empty) | Skarn license token, exported as `SKARN_LICENSE` for paid flags. The free core needs none. |
+| `license` | (empty) | Skarn license token, exported as `SKARN_LICENSE`. `skarn check` needs one; the free license is issued at https://getskarn.com/free after a quick email confirmation. Pass it from a repository secret. |
+| `on-missing-license` | `fail` | When `check` finds no license (exit 7) outside a fork or Dependabot pull request: `fail` the job, or `warn` and pass. Fork and Dependabot pull requests are always warned and skipped regardless. |
 | `extra-args` | (empty) | Additional arguments appended to the `skarn check` invocation, split on whitespace (quoted values with spaces are not preserved). |
 
 ## Outputs
@@ -66,13 +90,14 @@ A full agent-then-scan workflow is in [`examples/agentic-ci.yml`](examples/agent
 | Output | Description |
 | --- | --- |
 | `sarif-file` | Path to the written SARIF report. |
-| `exit-code` | The `skarn check` exit code (0 clean, 1 fail-on-severity, 2 fail-on-risk, 3 canary, 6 scan error). |
+| `exit-code` | The `skarn check` exit code (0 clean, 1 fail-on-severity, 2 fail-on-risk, 3 canary, 5 paid feature not covered, 6 scan error, 7 no license installed). |
 | `risk-score` | Session risk score (0-100) parsed from the SARIF report. |
 | `findings-count` | Number of findings in the SARIF report. |
+| `skipped` | `true` whenever `check` found no license and did not scan, so no SARIF was written (a fork/Dependabot PR, or `on-missing-license: warn` / `soft-fail`, or a hard failure); `false` on any run that scanned. It reports whether a SARIF exists to upload, not whether the job passed. Guard a SARIF upload with `if: always() && steps.<id>.outputs.skipped != 'true'`. |
 
 ## Binary acquisition
 
-The Action ships only this config and a thin wrapper; it never embeds the binary or any non-public rules. It resolves `skarn` in order: an explicit `skarn-path`, then `skarn` on `PATH`, then a download of the pinned `version` from `download-base-url`. Point `skarn-path` at a binary you install in an earlier step, or pin `version` once the public release channel is live. The free core needs no license; supply `license` only when you pass a paid flag through `extra-args`.
+The Action ships only this config and a thin wrapper; it never embeds the binary or any non-public rules. It resolves `skarn` in order: an explicit `skarn-path`, then `skarn` on `PATH`, then a download of the pinned `version` from `download-base-url`. Point `skarn-path` at a binary you install in an earlier step, or pin `version` once the public release channel is live. `skarn check` needs a license (see [Skarn license](#skarn-license)); the free one is issued after a quick email confirmation, and fork pull requests where the secret is unreadable are skipped rather than failed.
 
 The download branch fetches a raw binary over HTTPS and does not yet verify a checksum or signature; for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`. Signed-download verification for this path lands with the public release channel.
 

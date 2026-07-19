@@ -65,6 +65,69 @@ set +e
 CODE=$?
 set -e
 
+if [ "$CODE" = "7" ]; then
+  license_skip=false
+  skip_reason=""
+  if [ "${GITHUB_ACTOR:-}" = "dependabot[bot]" ]; then
+    license_skip=true
+    skip_reason=dependabot
+  elif [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -f "${GITHUB_EVENT_PATH:-}" ]; then
+    HEAD_REPO=$(jq -r '.pull_request.head.repo.full_name // ""' "$GITHUB_EVENT_PATH" 2>/dev/null || echo "")
+    if [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "${GITHUB_REPOSITORY:-}" ]; then
+      license_skip=true
+      skip_reason=fork
+    fi
+  fi
+
+  rm -f "$SARIF_FILE"
+
+  if [ "$license_skip" = "true" ]; then
+    if [ "$skip_reason" = "dependabot" ]; then
+      skip_msg="A Dependabot pull request runs against Dependabot's own secrets store, so this repository's Actions secrets - including the Skarn license - were not available, and the AI-session scan did not run. This is expected and it is not a failure: the same scan runs on the base branch, where the secret is readable."
+    else
+      skip_msg="A pull request from a fork cannot read this repository's secrets, so the Skarn license was not available and the AI-session scan did not run. This is expected and it is not a failure: the same scan runs on the base branch, where the secret is readable. Nothing was blocked and nothing was suppressed."
+    fi
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+      {
+        echo "## Skarn AI-session scan skipped"
+        echo
+        echo "Skarn skipped this pull request. $skip_msg"
+      } >>"$GITHUB_STEP_SUMMARY"
+    fi
+    printf '::warning title=Skarn scan skipped::%s\n' "Skarn skipped this pull request. $skip_msg"
+    {
+      echo "skipped=true"
+      echo "exit-code=$CODE"
+    } >>"${GITHUB_OUTPUT:-/dev/null}"
+    log "no license available on this pull request ($skip_reason); skipping the scan without failing the job"
+    exit 0
+  fi
+
+  # shellcheck disable=SC2016
+  no_license_summary='Skarn did not scan: no license was found. `skarn check` needs a license, and the free one is issued at https://getskarn.com/free after a quick email confirmation. Add it as a repository secret and pass it: `with: { license: ${{ secrets.SKARN_LICENSE }} }`.'
+  # shellcheck disable=SC2016
+  no_license_note='No license found. skarn check needs a license; the free one is issued at https://getskarn.com/free after a quick email confirmation. Add it as a repository secret and pass license: ${{ secrets.SKARN_LICENSE }}.'
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "## Skarn AI-session scan"
+      echo
+      echo "$no_license_summary"
+    } >>"$GITHUB_STEP_SUMMARY"
+  fi
+  {
+    echo "skipped=true"
+    echo "exit-code=$CODE"
+  } >>"${GITHUB_OUTPUT:-/dev/null}"
+  if [ "${INPUT_SOFT_FAIL:-false}" = "true" ] || [ "${INPUT_ON_MISSING_LICENSE:-fail}" = "warn" ]; then
+    printf '::warning title=Skarn::%s\n' "$no_license_note"
+    log "no license found; soft-fail or on-missing-license=warn is set, not failing the job"
+    exit 0
+  fi
+  printf '::error title=Skarn::%s\n' "$no_license_note"
+  log "no license found; skarn check needs one - register free at https://getskarn.com/free (exit $CODE)"
+  exit "$CODE"
+fi
+
 if ! jq empty "$SARIF_FILE" >/dev/null 2>&1; then
   cat "$SARIF_FILE" >&2 || true
   fail "skarn check did not produce valid SARIF (exit ${CODE})"
@@ -85,6 +148,7 @@ NOTES=$(jq -r '[.[] | select(.level == "note")] | length' "$RESULTS")
   echo "exit-code=$CODE"
   echo "risk-score=$RISK"
   echo "findings-count=$COUNT"
+  echo "skipped=false"
 } >>"${GITHUB_OUTPUT:-/dev/null}"
 
 if [ "${INPUT_JOB_SUMMARY:-true}" = "true" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
