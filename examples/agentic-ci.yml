@@ -23,7 +23,7 @@ jobs:
         id: skarn
         uses: skarn-security/skarn-action@v1
         with:
-          version: "0.18.0"
+          version: "0.18.1"
           license: ${{ secrets.SKARN_LICENSE }}
           fail-on-severity: high
           sarif-file: skarn-results.sarif
