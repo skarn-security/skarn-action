@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.18.0"
+    version: "0.18.1"
     license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
@@ -30,7 +30,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.18.0"
+    version: "0.18.1"
     license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
