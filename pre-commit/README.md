@@ -15,7 +15,7 @@ In your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/skarn-security/skarn-action
-    rev: v0.18.1
+    rev: v0.19.0
     hooks:
       - id: skarn
         args: [--hours, "24", --fail-on-severity, high]
