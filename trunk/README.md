@@ -34,7 +34,7 @@ actions:
       run: skarn check --project "$(basename ${workspace})" --fail-on-severity high
 ```
 
-`skarn check` needs a license: the free one is issued at https://getskarn.com/free after a quick email confirmation, installed once with `skarn license <file>` and read from `~/.config/skarn/license`, or supplied to a CI runner as the `SKARN_LICENSE` environment variable. Without one, `skarn check` exits 7 and Trunk fails the action with skarn's own message naming the fix - never a bare exit code.
+`skarn check` needs a license: the free one is issued at https://getskarn.com/free?utm_source=trunk-readme&utm_medium=referral&utm_campaign=free&utm_content=license after a quick email confirmation, installed once with `skarn license <file>` and read from `~/.config/skarn/license`, or supplied to a CI runner as the `SKARN_LICENSE` environment variable. Without one, `skarn check` exits 7 and Trunk fails the action with skarn's own message naming the fix - never a bare exit code.
 
 Rollout discipline (mirrors the skarn-guard / Socket-Firewall lesson): start at
 `pre-push` and report-only, then tighten.

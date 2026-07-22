@@ -15,7 +15,7 @@ In your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/skarn-security/skarn-action
-    rev: v0.19.0
+    rev: v0.20.0
     hooks:
       - id: skarn
         args: [--hours, "24", --fail-on-severity, high]
@@ -23,7 +23,7 @@ repos:
 
 `skarn` must be on `PATH` (`language: system`). Install it first (`brew install skarn-security/tap/skarn` or the release binary). The hook fails the commit when a finding is at or above the `--fail-on-severity` you set; with no gating flag it reports findings without blocking on them. Gating flags govern findings only - a setup failure such as a missing license still fails the commit regardless (see below).
 
-`skarn check` needs a license. The free one is issued at https://getskarn.com/free after a quick email confirmation; install it once with `skarn license <file>` and every local run reads it from `~/.config/skarn/license`. The hook needs no change and no secret: it runs on your own machine, where your personal license is already installed. Without a license `skarn check` exits 7 and prints how to register, so the commit fails with that message rather than a bare exit code.
+`skarn check` needs a license. The free one is issued at https://getskarn.com/free?utm_source=precommit-readme&utm_medium=referral&utm_campaign=free&utm_content=license after a quick email confirmation; install it once with `skarn license <file>` and every local run reads it from `~/.config/skarn/license`. The hook needs no change and no secret: it runs on your own machine, where your personal license is already installed. Without a license `skarn check` exits 7 and prints how to register, so the commit fails with that message rather than a bare exit code.
 
 Useful `args`:
 
