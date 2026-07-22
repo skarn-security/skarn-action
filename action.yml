@@ -15,7 +15,7 @@ inputs:
     required: false
     default: "latest"
   download-base-url:
-    description: "Base URL the binary is fetched from: <base>/v<version>/skarn-<arch>-<os>."
+    description: "Base URL the binary is fetched from: <base>/v<version>/skarn-<arch>-<os>. Checksums always come from the canonical skarn-dist release, never this URL; if a fetch from a custom base fails, the Action falls back to the canonical GitHub URL."
     required: false
     default: "https://github.com/skarn-security/skarn-dist/releases/download"
   hours:

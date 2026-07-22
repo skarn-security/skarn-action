@@ -33,11 +33,45 @@ resolve_binary() {
   [ "$ver" = "latest" ] && fail "no skarn on PATH and version is 'latest'; pin a concrete version (for example 0.15.0) or set skarn-path"
   ver="${ver#v}"
 
-  local url dest
-  url="${INPUT_DOWNLOAD_BASE_URL%/}/v${ver}/skarn-${arch}-${os}"
+  local canonical_base base asset url canonical_url dest sums
+  canonical_base="${SKARN_CANONICAL_BASE_URL:-https://github.com/skarn-security/skarn-dist/releases/download}"
+  canonical_base="${canonical_base%/}"
+  base="${INPUT_DOWNLOAD_BASE_URL:-$canonical_base}"
+  base="${base%/}"
+  asset="skarn-${arch}-${os}"
+  url="${base}/v${ver}/${asset}"
+  canonical_url="${canonical_base}/v${ver}/${asset}"
   dest="${RUNNER_TEMP:-/tmp}/skarn"
+  sums="${RUNNER_TEMP:-/tmp}/skarn-SHA256SUMS"
+
   log "downloading skarn ${ver} from ${url}"
-  curl -fsSL --retry 3 -o "$dest" "$url" || fail "download failed from ${url}"
+  if ! curl -fsSL --retry 3 -o "$dest" "$url"; then
+    [ "$base" = "$canonical_base" ] && { rm -f "$dest"; fail "download failed from ${url}"; }
+    log "download from ${url} failed; falling back to the canonical ${canonical_url}"
+    curl -fsSL --retry 3 -o "$dest" "$canonical_url" || { rm -f "$dest"; fail "download failed from ${url} and from the canonical ${canonical_url}"; }
+  fi
+
+  if ! curl -fsSL --retry 3 -o "$sums" "${canonical_base}/v${ver}/SHA256SUMS"; then
+    rm -f "$dest" "$sums"
+    fail "no SHA256SUMS for skarn ${ver} at the canonical release; versions published before checksums cannot be verified - pin a newer version or preinstall skarn and pass skarn-path"
+  fi
+
+  local expected actual
+  expected=$(awk -v f="$asset" '$2 == f { print $1; exit }' "$sums")
+  if [ -z "$expected" ]; then
+    rm -f "$dest" "$sums"
+    fail "SHA256SUMS for skarn ${ver} has no entry for ${asset}; pin a version whose release carries this asset or preinstall skarn and pass skarn-path"
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$dest" | awk '{ print $1 }')
+  else
+    actual=$(shasum -a 256 "$dest" | awk '{ print $1 }')
+  fi
+  if [ "$actual" != "$expected" ]; then
+    rm -f "$dest" "$sums"
+    fail "checksum mismatch for ${asset}: SHA256SUMS has ${expected:0:12} but the download is ${actual:0:12}; if download-base-url is set, remove it to use the canonical release; a freshly published release can mismatch until signing finishes, so re-run once, then report if it persists"
+  fi
+  rm -f "$sums"
   chmod +x "$dest"
   printf '%s' "$dest"
 }

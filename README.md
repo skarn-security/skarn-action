@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.19.0"
+    version: "0.20.0"
     license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
@@ -30,7 +30,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.19.0"
+    version: "0.20.0"
     license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
@@ -45,9 +45,9 @@ A full agent-then-scan workflow is in [`examples/agentic-ci.yml`](examples/agent
 
 ## Skarn license
 
-`skarn check` needs a license. The free one is issued at https://getskarn.com/free after a quick email confirmation: register, download the license file, and store its contents as a repository secret (for example `SKARN_LICENSE`). Pass it with `license: ${{ secrets.SKARN_LICENSE }}`. The binary still verifies the license offline against a key embedded in it - there is no network call at scan time.
+`skarn check` needs a license. The free one is issued at https://getskarn.com/free?utm_source=action-readme&utm_medium=referral&utm_campaign=free&utm_content=license-section after a quick email confirmation: register, download the license file, and store its contents as a repository secret (for example `SKARN_LICENSE`). Pass it with `license: ${{ secrets.SKARN_LICENSE }}`. The binary still verifies the license offline against a key embedded in it - there is no network call at scan time.
 
-Skarn is licensed under the [Skarn End User License Agreement](https://getskarn.com/terms/); running it constitutes acceptance. CI has no terminal to ask on, so Skarn prints a one-line stderr notice on each run instead (registering for the license already accepted the agreement on the form); set `SKARN_EULA_ACCEPTED: "1"` in the job's `env` to silence the notice on ephemeral runners.
+Skarn is licensed under the [Skarn End User License Agreement](https://getskarn.com/terms/?utm_source=action-readme&utm_medium=referral&utm_campaign=terms&utm_content=eula); running it constitutes acceptance. CI has no terminal to ask on, so Skarn prints a one-line stderr notice on each run instead (registering for the license already accepted the agreement on the form); set `SKARN_EULA_ACCEPTED: "1"` in the job's `env` to silence the notice on ephemeral runners.
 
 A pull request from a fork cannot read repository secrets, so the license is empty there - on exactly the pull requests an open-source project most wants scanned. The Action does not fail that build: it emits a `::warning::`, writes a job-summary note explaining why, sets the `skipped` output to `true`, deletes any partial SARIF, and exits 0. The same scan runs on the base branch, where the secret is readable. Dependabot pull requests are treated the same way, because they run against Dependabot's own secrets store rather than the repository's Actions secrets.
 
@@ -70,7 +70,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 | --- | --- | --- |
 | `skarn-path` | (empty) | Path to a pre-installed `skarn` binary. If set, or if `skarn` is already on `PATH`, the download step is skipped. |
 | `version` | `latest` | Skarn version to download when no binary is on `PATH`. Pin a concrete version (for example `0.15.0`); `latest` is rejected because there is no version to resolve without a network lookup. |
-| `download-base-url` | skarn-dist releases | Base URL the binary is fetched from: `<base>/v<version>/skarn-<arch>-<os>`. |
+| `download-base-url` | skarn-dist releases | Base URL the binary is fetched from: `<base>/v<version>/skarn-<arch>-<os>`. Checksums are always fetched from the canonical `skarn-dist` release, never from this URL; a fetch that fails against a custom base falls back to the canonical GitHub URL once. |
 | `hours` | (Skarn default 720) | Scan window in hours; `0` means no limit. |
 | `cli` | (all) | Restrict to one assistant: `claude`, `gemini`, `codex`, `cursor`, `copilot`. |
 | `project` | (all) | Restrict to sessions under this project path. |
@@ -81,7 +81,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 | `soft-fail` | `false` | Never fail the job on findings; still report. |
 | `job-summary` | `true` | Write a findings summary to the GitHub job summary. |
 | `annotations` | `true` | Emit per-finding workflow annotations. |
-| `license` | (empty) | Skarn license token, exported as `SKARN_LICENSE`. `skarn check` needs one; the free license is issued at https://getskarn.com/free after a quick email confirmation. Pass it from a repository secret. |
+| `license` | (empty) | Skarn license token, exported as `SKARN_LICENSE`. `skarn check` needs one; the free license is issued at https://getskarn.com/free?utm_source=action-readme&utm_medium=referral&utm_campaign=free&utm_content=license-input after a quick email confirmation. Pass it from a repository secret. |
 | `on-missing-license` | `fail` | When `check` finds no license (exit 7) outside a fork or Dependabot pull request: `fail` the job, or `warn` and pass. Fork and Dependabot pull requests are always warned and skipped regardless. |
 | `extra-args` | (empty) | Additional arguments appended to the `skarn check` invocation, split on whitespace (quoted values with spaces are not preserved). |
 
@@ -99,7 +99,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 
 The Action ships only this config and a thin wrapper; it never embeds the binary or any non-public rules. It resolves `skarn` in order: an explicit `skarn-path`, then `skarn` on `PATH`, then a download of the pinned `version` from `download-base-url`. Point `skarn-path` at a binary you install in an earlier step, or pin `version` once the public release channel is live. `skarn check` needs a license (see [Skarn license](#skarn-license)); the free one is issued after a quick email confirmation, and fork pull requests where the secret is unreadable are skipped rather than failed.
 
-The download branch fetches a raw binary over HTTPS and does not yet verify a checksum or signature; for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`. Signed-download verification for this path lands with the public release channel.
+The download branch verifies every binary it fetches. It downloads the pinned `skarn-<arch>-<os>` asset, then fetches `SHA256SUMS` from the canonical `skarn-dist` release for that version and checks the asset's sha256 against it, failing closed with a clear error on any mismatch, missing checksum line, or missing `SHA256SUMS` asset - the downloaded file is deleted before a later step could run it. The checksums always come from the canonical release, never from `download-base-url`, so a custom mirror can never vouch for its own bytes; if a fetch from a custom `download-base-url` fails, the Action logs a notice and retries the canonical GitHub URL once. This defeats a compromised `download-base-url` mirror and transit corruption, but not compromise of the canonical release assets themselves - an attacker who controls the `skarn-dist` release controls both the binary and its `SHA256SUMS`. Verifying the binary against the signed `SHA256SUMS.sigstore.json` cosign bundle out of band is the recorded follow-up that closes that gap. `SHA256SUMS` ships from v0.19.0 onward: pinning an earlier `version` fails closed because those releases predate it, so pin v0.19.0 or newer - or, for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`.
 
 ## What appears where
 
@@ -115,4 +115,4 @@ This Action is the batch, after-the-fact path. For real-time, pre-execution bloc
 
 ## License
 
-This Action - the `action.yml` manifest, the wrapper scripts, and these docs - is released under the MIT License (see `LICENSE`). It ships configuration and a thin wrapper only. The `skarn` binary it downloads and runs is proprietary software, licensed separately; see https://getskarn.com and the license distributed with the binary.
+This Action - the `action.yml` manifest, the wrapper scripts, and these docs - is released under the MIT License (see `LICENSE`). It ships configuration and a thin wrapper only. The `skarn` binary it downloads and runs is proprietary software, licensed separately; see https://getskarn.com/?utm_source=action-readme&utm_medium=referral&utm_campaign=home&utm_content=license-footer and the license distributed with the binary.
