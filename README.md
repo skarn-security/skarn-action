@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.20.0"
+    version: "0.21.0"
     license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
@@ -30,7 +30,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.20.0"
+    version: "0.21.0"
     license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
@@ -69,8 +69,9 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 | Input | Default | Description |
 | --- | --- | --- |
 | `skarn-path` | (empty) | Path to a pre-installed `skarn` binary. If set, or if `skarn` is already on `PATH`, the download step is skipped. |
-| `version` | `latest` | Skarn version to download when no binary is on `PATH`. Pin a concrete version (for example `0.15.0`); `latest` is rejected because there is no version to resolve without a network lookup. |
+| `version` | `latest` | Skarn version to download when no binary is on `PATH`. Pin a concrete version as `X.Y.Z` or `vX.Y.Z` (for example `0.15.0` or `v0.15.0`); anything else is refused, because the version is interpolated into the download URL and into the signer-identity pattern. The default `latest` works only when `skarn` is already on `PATH` or `skarn-path` is set; a download must name the version it is verifying, so `latest` is refused rather than resolved over the network. |
 | `download-base-url` | skarn-dist releases | Base URL the binary is fetched from: `<base>/v<version>/skarn-<arch>-<os>`. Checksums are always fetched from the canonical `skarn-dist` release, never from this URL; a fetch that fails against a custom base falls back to the canonical GitHub URL once. |
+| `verify-provenance` | `auto` | Check the Sigstore keyless signature over `SHA256SUMS`, which proves the Skarn release workflow produced it. `auto` verifies when `cosign` is on `PATH` and emits a warning naming what went unverified when it is not; `require` fails the job when `cosign` is missing or the release publishes no signature; `off` skips the check and logs that it did. An invalid signature always fails the job, in every mode except `off`. Only applies when the Action downloads the binary. |
 | `hours` | (Skarn default 720) | Scan window in hours; `0` means no limit. |
 | `cli` | (all) | Restrict to one assistant: `claude`, `gemini`, `codex`, `cursor`, `copilot`. |
 | `project` | (all) | Restrict to sessions under this project path. |
@@ -99,7 +100,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 
 The Action ships only this config and a thin wrapper; it never embeds the binary or any non-public rules. It resolves `skarn` in order: an explicit `skarn-path`, then `skarn` on `PATH`, then a download of the pinned `version` from `download-base-url`. Point `skarn-path` at a binary you install in an earlier step, or pin `version` once the public release channel is live. `skarn check` needs a license (see [Skarn license](#skarn-license)); the free one is issued after a quick email confirmation, and fork pull requests where the secret is unreadable are skipped rather than failed.
 
-The download branch verifies every binary it fetches. It downloads the pinned `skarn-<arch>-<os>` asset, then fetches `SHA256SUMS` from the canonical `skarn-dist` release for that version and checks the asset's sha256 against it, failing closed with a clear error on any mismatch, missing checksum line, or missing `SHA256SUMS` asset - the downloaded file is deleted before a later step could run it. The checksums always come from the canonical release, never from `download-base-url`, so a custom mirror can never vouch for its own bytes; if a fetch from a custom `download-base-url` fails, the Action logs a notice and retries the canonical GitHub URL once. This defeats a compromised `download-base-url` mirror and transit corruption, but not compromise of the canonical release assets themselves - an attacker who controls the `skarn-dist` release controls both the binary and its `SHA256SUMS`. Verifying the binary against the signed `SHA256SUMS.sigstore.json` cosign bundle out of band is the recorded follow-up that closes that gap. `SHA256SUMS` ships from v0.19.0 onward: pinning an earlier `version` fails closed because those releases predate it, so pin v0.19.0 or newer - or, for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`.
+The download branch verifies every binary it fetches. It downloads the pinned `skarn-<arch>-<os>` asset, then fetches `SHA256SUMS` from the canonical `skarn-dist` release for that version and checks the asset's sha256 against it, failing closed with a clear error on any mismatch, missing checksum line, or missing `SHA256SUMS` asset - the downloaded file is deleted before a later step could run it. The checksums always come from the canonical release, never from `download-base-url`, so a custom mirror can never vouch for its own bytes; if a fetch from a custom `download-base-url` fails, the Action logs a notice and retries the canonical GitHub URL once. This defeats a compromised `download-base-url` mirror and transit corruption. Compromise of the canonical release assets themselves is what `verify-provenance` addresses: anything with write access to the `skarn-dist` release can replace both the binary and its `SHA256SUMS`, and a checksum comparison alone cannot tell that apart from a genuine publish, because the substituted sums file is internally consistent. So the Action also checks that `SHA256SUMS` carries a Sigstore keyless signature whose certificate identity is the Skarn release workflow at the tag being installed (`release.yml` or `publish-npm.yml` in `skarn-security/skarn`, at `refs/tags/v<version>`), which a release-write credential cannot forge because it cannot make Fulcio issue a certificate for that workflow identity. An invalid signature deletes the download and fails the job. With `verify-provenance: auto` a runner without `cosign` still gets the checksum check and a warning stating that the signature went unchecked; use `require` on a supply-chain-sensitive pipeline, after a `sigstore/cosign-installer` step. `SHA256SUMS` ships from v0.19.0 onward: pinning an earlier `version` fails closed because those releases predate it, so pin v0.19.0 or newer - or, for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`.
 
 ## What appears where
 

@@ -4,6 +4,72 @@ set -euo pipefail
 log() { printf 'skarn-action: %s\n' "$1" >&2; }
 fail() { log "$1"; exit 1; }
 
+SUMS_SIGNER_IDENTITY_PREFIX='^https://github\.com/skarn-security/skarn/\.github/workflows/(release|publish-npm)\.yml@refs/tags/v'
+SUMS_UNVERIFIED_CONSEQUENCE="SHA256SUMS itself was not checked against its Sigstore signature, so it is trusted only because GitHub served it; the binary is still compared against SHA256SUMS and still fails closed on a mismatch"
+
+PROVENANCE_MODE="${INPUT_VERIFY_PROVENANCE:-auto}"
+case "$PROVENANCE_MODE" in
+  auto | require | off) ;;
+  *) fail "verify-provenance must be auto, require or off (got '$PROVENANCE_MODE')" ;;
+esac
+
+DEFERRED_PROVENANCE_WARNING="${RUNNER_TEMP:-/tmp}/skarn-provenance-warning"
+rm -f "$DEFERRED_PROVENANCE_WARNING"
+
+defer_unverified_warning() {
+  log "$1"
+  printf '%s' "$1" >"$DEFERRED_PROVENANCE_WARNING"
+}
+
+emit_deferred_provenance_warning() {
+  [ -f "$DEFERRED_PROVENANCE_WARNING" ] || return 0
+  printf '::warning title=Skarn provenance unverified::%s\n' "$(cat "$DEFERRED_PROVENANCE_WARNING")"
+  rm -f "$DEFERRED_PROVENANCE_WARNING"
+}
+
+verify_sums_provenance() {
+  local ver="$1" sums="$2" canonical_base="$3" binary="$4"
+  local mode="$PROVENANCE_MODE"
+  local bundle="${sums}.sigstore.json"
+
+  if [ "$mode" = "off" ]; then
+    log "verify-provenance=off: not checking who signed SHA256SUMS. $SUMS_UNVERIFIED_CONSEQUENCE"
+    return 0
+  fi
+
+  if ! curl -fsSL --retry 3 -o "$bundle" "${canonical_base}/v${ver}/SHA256SUMS.sigstore.json"; then
+    rm -f "$bundle"
+    if [ "$mode" = "require" ]; then
+      rm -f "$sums" "$binary"
+      fail "verify-provenance=require but skarn ${ver} publishes no SHA256SUMS.sigstore.json; releases before v0.19.0 carry no signature - pin a newer version or set verify-provenance to auto"
+    fi
+    defer_unverified_warning "skarn ${ver} publishes no SHA256SUMS.sigstore.json, so $SUMS_UNVERIFIED_CONSEQUENCE."
+    return 0
+  fi
+
+  if ! command -v cosign >/dev/null 2>&1; then
+    rm -f "$bundle"
+    if [ "$mode" = "require" ]; then
+      rm -f "$sums" "$binary"
+      fail "verify-provenance=require but cosign is not on PATH; add a step using sigstore/cosign-installer before this Action, or set verify-provenance to auto"
+    fi
+    defer_unverified_warning "cosign is not on PATH, so $SUMS_UNVERIFIED_CONSEQUENCE. Add a sigstore/cosign-installer step before this one to verify it."
+    return 0
+  fi
+
+  local escaped_ver identity
+  escaped_ver="${ver//./\\.}"
+  identity="${SUMS_SIGNER_IDENTITY_PREFIX}${escaped_ver}\$"
+  if ! cosign verify-blob "$sums" --bundle "$bundle" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp "$identity" >/dev/null 2>&1; then
+    rm -f "$bundle" "$sums" "$binary"
+    fail "SHA256SUMS for skarn ${ver} is not signed by the skarn release workflow at tag v${ver}; expected a Sigstore keyless signature whose certificate identity matches ${identity}. Refusing to install: the checksums could have been substituted by anything with write access to the release"
+  fi
+  rm -f "$bundle"
+  log "provenance verified: SHA256SUMS for ${ver} carries a Sigstore keyless signature from the skarn release workflow at tag v${ver}"
+}
+
 resolve_binary() {
   if [ -n "${INPUT_SKARN_PATH:-}" ]; then
     [ -x "$INPUT_SKARN_PATH" ] || fail "skarn-path '$INPUT_SKARN_PATH' is not an executable file"
@@ -32,6 +98,9 @@ resolve_binary() {
   local ver="${INPUT_VERSION:-latest}"
   [ "$ver" = "latest" ] && fail "no skarn on PATH and version is 'latest'; pin a concrete version (for example 0.15.0) or set skarn-path"
   ver="${ver#v}"
+  if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    fail "version '${INPUT_VERSION:-}' is not a release version; pass X.Y.Z or vX.Y.Z (for example 0.19.0 or v0.19.0). It is interpolated into a download URL and into the signer-identity pattern, so anything else is refused rather than escaped"
+  fi
 
   local canonical_base base asset url canonical_url dest sums
   canonical_base="${SKARN_CANONICAL_BASE_URL:-https://github.com/skarn-security/skarn-dist/releases/download}"
@@ -56,6 +125,8 @@ resolve_binary() {
     fail "no SHA256SUMS for skarn ${ver} at the canonical release; versions published before checksums cannot be verified - pin a newer version or preinstall skarn and pass skarn-path"
   fi
 
+  verify_sums_provenance "$ver" "$sums" "$canonical_base" "$dest"
+
   local expected actual
   expected=$(awk -v f="$asset" '$2 == f { print $1; exit }' "$sums")
   if [ -z "$expected" ]; then
@@ -77,6 +148,7 @@ resolve_binary() {
 }
 
 BIN=$(resolve_binary)
+emit_deferred_provenance_warning
 log "using $("$BIN" --version 2>/dev/null || echo skarn)"
 
 SARIF_FILE="${INPUT_SARIF_FILE:-skarn-results.sarif}"
