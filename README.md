@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.21.0"
+    version: "0.22.0"
     license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
@@ -30,7 +30,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.21.0"
+    version: "0.22.0"
     license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
@@ -105,6 +105,34 @@ The download branch verifies every binary it fetches. It downloads the pinned `s
 ## What appears where
 
 Findings live in AI-session files under `$HOME`, not in your repository tree, so the SARIF result locations point at session file paths rather than repo lines. GitHub code scanning ingests the SARIF and lists the findings in the Security tab, but it cannot anchor them to a pull-request diff line (there is no matching source line). The always-on job summary and workflow annotations are therefore the primary developer-facing surface; the SARIF upload is the durable Security-tab record and cross-run dedupe (via `partialFingerprints`).
+
+## SARIF against GitHub's ingestion limits
+
+GitHub rejects or truncates a SARIF file that exceeds published limits, and truncation is the dangerous half because the upload still succeeds. Skarn's SARIF was measured against those limits on a real scan of 875 findings across 113 distinct rules, which is a larger corpus than a CI runner's own session artifacts will normally produce:
+
+| Limit | GitHub's value | Measured on that run |
+| --- | --- | --- |
+| SARIF file size, gzip-compressed | 10 MB | 60,896 bytes (779,640 uncompressed) |
+| Runs per file | 20 | 1 |
+| Results per run | 25,000, of which the top 5,000 by severity are kept | 875 |
+| Rules per run | 25,000 | 113 |
+| Tool extensions per run | 100 | 0 |
+| Locations per result | 1,000, truncated to 100 | 1 |
+| Tags per rule | 20, truncated to 10 | 3 |
+
+Skarn emits one run per file and one location per result by construction, and its `rule.properties.tags` mirror carries the finding's OWASP LLM, MITRE ATLAS, and CWE ids, which is where the tags count comes from. So the only limit a real fleet can approach is results per run, and only past 5,000 findings in one report. Scope the scan rather than let GitHub choose which findings to drop: `hours` narrows the window, `severity` raises the reporting floor, and `cli` restricts the scan to one assistant.
+
+Every result carries `partialFingerprints`, which is what lets code scanning track an alert across runs instead of reopening it each time.
+
+## The `category` input, and why it is not optional here
+
+The upload examples above pass `category: skarn`, and that is load-bearing rather than decorative. GitHub's rule: "if you upload a second SARIF file for a commit with the same category and from the same tool, the earlier results are overwritten. However, if you try to upload multiple SARIF files for the same tool and category in a single GitHub Actions workflow run, the misconfiguration is detected and the run will fail."
+
+Note what that rule turns on: the same tool AND the same category. Two different tools uploading with the same category do not overwrite each other, because the tool differs, so `category` is not what isolates Skarn from your other scanners. What it is for is distinguishing several Skarn analyses of one commit from each other. If a workflow run scans more than once with Skarn (a matrix over assistants, say), each leg needs its own category, or the run fails outright on the detected misconfiguration; and across runs, two legs sharing a category would overwrite each other's results.
+
+## Azure DevOps
+
+The Azure DevOps equivalent, using GitHub Advanced Security for Azure DevOps and the `AdvancedSecurity-Publish@1` task, is in [`../azure-devops/`](../azure-devops/).
 
 ## Runner support
 
