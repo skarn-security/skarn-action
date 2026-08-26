@@ -4,7 +4,7 @@ Add Skarn to a [pre-commit](https://pre-commit.com) chain so a batch AI-session 
 
 ## Honest scope
 
-This hook runs `skarn check` over the AI coding-assistant session logs on your machine (`~/.claude`, `~/.codex`, ...); it does not scan the staged diff. Skarn's surface is what the AI assistant saw, wrote, and ran, not your source tree, so `pass_filenames` is off and the staged file list is not passed to it. This is the batch path. The real-time, pre-execution path is `skarn guard` (a hook that vets each agent tool call before it runs); see the plugin integrations under `integrations/`.
+This hook runs `skarn check` over the AI coding-assistant session logs on your machine (`~/.claude`, `~/.codex`, and more); it does not scan the staged diff. Skarn's surface is what the AI assistant saw, wrote, and ran, not your source tree, so `pass_filenames` is off and the staged file list is not passed to it. This is the batch path. The real-time, pre-execution path is `skarn guard` (a hook that vets each agent tool call before it runs); `integrations/FLEET.md` is the table of which delivery options exist per guard host: the plugin a developer installs, the payload an administrator pushes, and the container image.
 
 Because it scans all in-window sessions rather than staged files, keep the window small and the gate explicit via `args`.
 
@@ -15,7 +15,7 @@ In your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/skarn-security/skarn-action
-    rev: v0.24.0
+    rev: v0.25.0
     hooks:
       - id: skarn
         args: [--hours, "24", --fail-on-severity, high]

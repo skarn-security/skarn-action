@@ -1,8 +1,8 @@
-# Security Policy
+# Security policy
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately, not in a public issue. Use GitHub's private vulnerability reporting on this repository (the Security tab, "Report a vulnerability"), or the contact on https://getskarn.com. We aim to acknowledge a report within a few business days.
+Report suspected vulnerabilities privately, not in a public issue. Use GitHub's private vulnerability reporting on this repository (the Security tab, "Report a vulnerability"), or the contact on https://getskarn.com. Expect an acknowledgement within one business day.
 
 ## Scope
 

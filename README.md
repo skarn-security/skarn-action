@@ -1,6 +1,6 @@
 # Skarn GitHub Action
 
-Scan what your CI's AI agent did. When an AI coding agent (Claude Code, Codex CLI, Cursor, Copilot) runs inside a GitHub Action or devcontainer, it leaves session transcripts under `$HOME` (`~/.claude`, `~/.codex`, ...). This Action runs `skarn check` over those transcripts before the job ends, surfaces leaked credentials and attack patterns, writes a SARIF report for the code-scanning Security tab, and can fail the job on a severity or risk threshold.
+Scan what your CI's AI agent did. When an AI coding agent (Claude Code, Gemini CLI, Codex CLI, Cursor, Copilot, Kimi Code CLI, Grok Build, or Grok Bot) runs inside a GitHub Action or devcontainer, it leaves session transcripts under `$HOME` (`~/.claude`, `~/.codex`, and more). This Action runs `skarn check` over those transcripts before the job ends, surfaces leaked credentials and attack patterns, writes a SARIF report for the code-scanning Security tab, and can fail the job on a severity or risk threshold.
 
 This is not a repo or git-history secret scanner. Skarn reads AI-session logs and agent activity, not your source tree or commit history - use a dedicated secret scanner for those. Skarn covers the surface they do not: what the assistant saw, wrote, and ran in the session.
 
@@ -18,7 +18,7 @@ This is not a repo or git-history secret scanner. Skarn reads AI-session logs an
 - name: Skarn AI-session scan
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.24.0"
+    version: "0.25.0"
     license: ${{ secrets.SKARN_LICENSE }}
     fail-on-severity: high
 ```
@@ -30,7 +30,7 @@ Send the findings to the GitHub code-scanning Security tab by uploading the SARI
   id: skarn
   uses: skarn-security/skarn-action@v1
   with:
-    version: "0.24.0"
+    version: "0.25.0"
     license: ${{ secrets.SKARN_LICENSE }}
     sarif-file: skarn-results.sarif
 - name: Upload SARIF to code scanning
@@ -73,7 +73,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 | `download-base-url` | skarn-dist releases | Base URL the binary is fetched from: `<base>/v<version>/skarn-<arch>-<os>`. Checksums are always fetched from the canonical `skarn-dist` release, never from this URL; a fetch that fails against a custom base falls back to the canonical GitHub URL once. |
 | `verify-provenance` | `auto` | Check the Sigstore keyless signature over `SHA256SUMS`, which proves the Skarn release workflow produced it. `auto` verifies when `cosign` is on `PATH` and emits a warning naming what went unverified when it is not; `require` fails the job when `cosign` is missing or the release publishes no signature; `off` skips the check and logs that it did. An invalid signature always fails the job, in every mode except `off`. Only applies when the Action downloads the binary. |
 | `hours` | (Skarn default 720) | Scan window in hours; `0` means no limit. |
-| `cli` | (all) | Restrict to one assistant: `claude`, `gemini`, `codex`, `cursor`, `copilot`. |
+| `cli` | (all) | Restrict to one assistant: `claude`, `gemini`, `codex`, `cursor`, `copilot`, `kimi`, `grok`, `grokbot`. |
 | `project` | (all) | Restrict to sessions under this project path. |
 | `severity` | (Skarn default medium) | Report only findings at or above this severity. |
 | `fail-on-severity` | (empty, report-only) | Fail the job (exit 1) if any finding is at or above this severity. |
@@ -100,7 +100,7 @@ Guard the SARIF upload with `skipped` so no run that did not scan tries to uploa
 
 The Action ships only this config and a thin wrapper; it never embeds the binary or any non-public rules. It resolves `skarn` in order: an explicit `skarn-path`, then `skarn` on `PATH`, then a download of the pinned `version` from `download-base-url`. Point `skarn-path` at a binary you install in an earlier step, or pin `version` once the public release channel is live. `skarn check` needs a license (see [Skarn license](#skarn-license)); the free one is issued after a quick email confirmation, and fork pull requests where the secret is unreadable are skipped rather than failed.
 
-The download branch verifies every binary it fetches. It downloads the pinned `skarn-<arch>-<os>` asset, then fetches `SHA256SUMS` from the canonical `skarn-dist` release for that version and checks the asset's sha256 against it, failing closed with a clear error on any mismatch, missing checksum line, or missing `SHA256SUMS` asset - the downloaded file is deleted before a later step could run it. The checksums always come from the canonical release, never from `download-base-url`, so a custom mirror can never vouch for its own bytes; if a fetch from a custom `download-base-url` fails, the Action logs a notice and retries the canonical GitHub URL once. This defeats a compromised `download-base-url` mirror and transit corruption. Compromise of the canonical release assets themselves is what `verify-provenance` addresses: anything with write access to the `skarn-dist` release can replace both the binary and its `SHA256SUMS`, and a checksum comparison alone cannot tell that apart from a genuine publish, because the substituted sums file is internally consistent. So the Action also checks that `SHA256SUMS` carries a Sigstore keyless signature whose certificate identity is the Skarn release workflow at the tag being installed (`release.yml` or `publish-npm.yml` in `skarn-security/skarn`, at `refs/tags/v<version>`), which a release-write credential cannot forge because it cannot make Fulcio issue a certificate for that workflow identity. An invalid signature deletes the download and fails the job. With `verify-provenance: auto` a runner without `cosign` still gets the checksum check and a warning stating that the signature went unchecked; use `require` on a supply-chain-sensitive pipeline, after a `sigstore/cosign-installer` step. `SHA256SUMS` ships from v0.19.0 onward: pinning an earlier `version` fails closed because those releases predate it, so pin v0.19.0 or newer - or, for a supply-chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`.
+The download branch verifies every binary it fetches. It downloads the pinned `skarn-<arch>-<os>` asset, then fetches `SHA256SUMS` from the canonical `skarn-dist` release for that version and checks the asset's sha256 against it, failing closed with a clear error on any mismatch, missing checksum line, or missing `SHA256SUMS` asset - the downloaded file is deleted before a later step could run it. The checksums always come from the canonical release, never from `download-base-url`, so a custom mirror can never vouch for its own bytes; if a fetch from a custom `download-base-url` fails, the Action logs a notice and retries the canonical GitHub URL once. This defeats a compromised `download-base-url` mirror and transit corruption. Compromise of the canonical release assets themselves is what `verify-provenance` addresses: anything with write access to the `skarn-dist` release can replace both the binary and its `SHA256SUMS`, and a checksum comparison alone cannot tell that apart from a genuine publish, because the substituted sums file is internally consistent. So the Action also checks that `SHA256SUMS` carries a Sigstore keyless signature whose certificate identity is the Skarn release workflow at the tag being installed (`release.yml` or `publish-npm.yml` in `skarn-security/skarn`, at `refs/tags/v<version>`), which a release-write credential cannot forge because it cannot make Fulcio issue a certificate for that workflow identity. An invalid signature deletes the download and fails the job. With `verify-provenance: auto` a runner without `cosign` still gets the checksum check and a warning stating that the signature went unchecked; use `require` on a supply chain-sensitive pipeline, after a `sigstore/cosign-installer` step. `SHA256SUMS` ships from v0.19.0 onward: pinning an earlier `version` fails closed because those releases predate it, so pin v0.19.0 or newer - or, for a supply chain-sensitive pipeline, install `skarn` in an earlier step with your own verification (the OCI image is cosign-signed with an SBOM) and pass `skarn-path`.
 
 ## What appears where
 
@@ -108,7 +108,7 @@ Findings live in AI-session files under `$HOME`, not in your repository tree, so
 
 ## SARIF against GitHub's ingestion limits
 
-GitHub rejects or truncates a SARIF file that exceeds published limits, and truncation is the dangerous half because the upload still succeeds. Skarn's SARIF was measured against those limits on a real scan of 875 findings across 113 distinct rules, which is a larger corpus than a CI runner's own session artifacts will normally produce:
+GitHub rejects or truncates a SARIF file that exceeds published limits, and truncation is the dangerous half because the upload still succeeds. Skarn's SARIF was measured against those limits on a real scan of 875 findings across 113 distinct rules, which is a larger corpus than a CI runner's own session artifacts normally produce:
 
 | Limit | GitHub's value | Measured on that run |
 | --- | --- | --- |
@@ -126,7 +126,9 @@ Every result carries `partialFingerprints`, which is what lets code scanning tra
 
 ## The `category` input, and why it is not optional here
 
+<!-- vale Google.Will = NO -->
 The upload examples above pass `category: skarn`, and that is load-bearing rather than decorative. GitHub's rule: "if you upload a second SARIF file for a commit with the same category and from the same tool, the earlier results are overwritten. However, if you try to upload multiple SARIF files for the same tool and category in a single GitHub Actions workflow run, the misconfiguration is detected and the run will fail."
+<!-- vale Google.Will = YES -->
 
 Note what that rule turns on: the same tool AND the same category. Two different tools uploading with the same category do not overwrite each other, because the tool differs, so `category` is not what isolates Skarn from your other scanners. What it is for is distinguishing several Skarn analyses of one commit from each other. If a workflow run scans more than once with Skarn (a matrix over assistants, say), each leg needs its own category, or the run fails outright on the detected misconfiguration; and across runs, two legs sharing a category would overwrite each other's results.
 
@@ -140,7 +142,7 @@ The wrapper is a Bash composite step: Linux and macOS runners are supported. Win
 
 ## Real-time alternative
 
-This Action is the batch, after-the-fact path. For real-time, pre-execution blocking inside an agent, use `skarn guard` (a hook that vets each tool call before it runs). See the plugin integrations under `integrations/`. For the GitHub Copilot cloud agent specifically, `integrations/copilot-cloud-agent/` gates each tool call server-side before it runs, in the same CI this Action scans after the fact.
+This Action is the batch, after-the-fact path. For real-time, pre-execution blocking inside an agent, use `skarn guard` (a hook that vets each tool call before it runs). `integrations/FLEET.md` is the table of which delivery options exist per guard host: the plugin a developer installs, the payload an administrator pushes, and the container image. For the GitHub Copilot cloud agent specifically, `integrations/copilot-cloud-agent/` gates each tool call server-side before it runs, in the same CI this Action scans after the fact.
 
 ## License
 

@@ -5,16 +5,18 @@ already operates, beside trufflehog / semgrep / osv-scanner, as the AI-session
 security layer none of those cover.
 
 Skarn fits Trunk's **Action** model better than its Linter model: its findings live
-in AI session transcripts under `$HOME` (`~/.claude`, `~/.codex`, ...), not in repo
+in AI session transcripts under `$HOME` (`~/.claude`, `~/.codex`, and more), not in repo
 lines, and Trunk linters run in a hermetic sandbox that may not see `$HOME`. So
 **lead with the Action (Shape A) for gating**; the SARIF Linter (Shape B) is an
 optional visibility add-on where the sandbox permits `$HOME` reads.
 
-> Scoping note: `--project <p>` keeps sessions whose project name starts with `<p>`,
-> and Skarn derives that name as the repo **basename** (e.g. `skarn`), not the absolute
-> path - so pass `--project "$(basename ${workspace})"`, not `--project ${workspace}`
-> (the latter matches nothing). Trade-off: two repos sharing a basename would both
-> match; omit `--project` for a host-wide scan of all sessions.
+> Scoping note: `--project <p>` matches a session's project display name exactly
+> (case-insensitive), or its canonical root path or a parent directory - never a
+> name prefix. The display name is usually the repo **basename** (for example `skarn`),
+> so `--project "$(basename ${workspace})"` is the robust form; `--project ${workspace}`
+> works only when Trunk's workspace path is the same path the session recorded as its
+> root, which a sandboxed run may not preserve. Trade-off: two repos sharing a basename
+> would both match; omit `--project` for a host-wide scan of all sessions.
 
 ## Shape A (recommended): gating Action
 

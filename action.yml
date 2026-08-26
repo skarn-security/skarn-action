@@ -27,7 +27,7 @@ inputs:
     required: false
     default: ""
   cli:
-    description: "Restrict the scan to one assistant: claude, gemini, codex, cursor, copilot. Empty scans all."
+    description: "Restrict the scan to one assistant: claude, gemini, codex, cursor, copilot, kimi, grok, grokbot. Empty scans all."
     required: false
     default: ""
   project:
