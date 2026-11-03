@@ -15,7 +15,7 @@ In your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/skarn-security/skarn-action
-    rev: v0.33.0
+    rev: v0.34.0
     hooks:
       - id: skarn
         args: [--hours, "24", --fail-on-severity, high]
@@ -28,7 +28,7 @@ repos:
 Useful `args`:
 
 - `--hours <n>` - scan window; `0` means no limit.
-- `--cli <name>` - restrict to one assistant (`claude`, `gemini`, `codex`, `cursor`, `copilot`).
+- `--cli <name>` - restrict to one assistant (`claude`, `gemini`, `codex`, `cursor`, `copilot`, `kimi`, `grok`, `grokbot`, `antigravity`, `opencode`, `cline`, `copilot-code`).
 - `--fail-on-severity <level>` / `--fail-on-risk <n>` - CI-style gating.
 - `--baseline <file>` - suppress accepted findings and fail only on new ones; without it, `~/.config/skarn/baseline.json` applies automatically when present.
 
